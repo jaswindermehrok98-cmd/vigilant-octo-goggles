@@ -131,6 +131,15 @@ export default function Home() {
   const [codePrompt, setCodePrompt] = useState("");
   const [mapPrompt, setMapPrompt] = useState("");
   const [geminiChat, setGeminiChat] = useState([]);
+  const [clock, setClock] = useState(() => new Date());
+  const [sessionSeconds, setSessionSeconds] = useState(0);
+  const [idleSeconds, setIdleSeconds] = useState(0);
+  const [lifeMessage, setLifeMessage] = useState("All systems nominal. Awaiting your next instruction.");
+  const [activityFeed, setActivityFeed] = useState(["CORE ONLINE", "MEMORY READY", "GEMINI LINK ESTABLISHED"]);
+  const [proactive, setProactive] = useState(true);
+  const [reactorFocus, setReactorFocus] = useState(false);
+  const lastActivityRef = useRef(Date.now());
+  const activityIndexRef = useRef(0);
 
   const memoryRef = useRef([]);
   const statusRef = useRef("ready");
@@ -149,6 +158,60 @@ export default function Home() {
   const { messages, sendMessage, status, stop, error, clearError } = useChat({ transport });
 
   useEffect(() => { statusRef.current = status; }, [status]);
+
+  useEffect(() => {
+    const clockTimer = window.setInterval(() => setClock(new Date()), 1000);
+    const lifeTimer = window.setInterval(() => {
+      setSessionSeconds((value) => value + 1);
+      setIdleSeconds(Math.max(0, Math.floor((Date.now() - lastActivityRef.current) / 1000)));
+    }, 1000);
+    return () => { window.clearInterval(clockTimer); window.clearInterval(lifeTimer); };
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      lastActivityRef.current = Date.now();
+      setIdleSeconds(0);
+    };
+    window.addEventListener("pointerdown", handler, { passive: true });
+    window.addEventListener("keydown", handler);
+    window.addEventListener("mousemove", handler, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", handler);
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("mousemove", handler);
+    };
+  }, []);
+
+  useEffect(() => {
+    const messagesByPanel = {
+      command: ["Standing by for a mission.", "Command channel ready.", "I have tools online and am ready to act."],
+      flash: ["Fast reasoning core ready.", "Search, code, and grounded answers available.", "Flash core is warm."],
+      live: ["Live voice is on standby.", "Real-time voice channel ready when you are.", "Audio pipeline standing by."],
+      create: ["Creative systems ready.", "Image, video and voice generation available.", "Generative studio standing by."],
+      research: ["Research queue ready.", "Deep investigations can run in the background.", "Evidence workflow ready."],
+      workspace: ["Context workspace ready.", "Files and URLs can be brought into the mission.", "Context layer standing by."],
+      memory: ["Local memory is under your control.", "Personal context is available on this device.", "Memory vault standing by."]
+    };
+    const pool = messagesByPanel[mode] || messagesByPanel.command;
+    const timer = window.setInterval(() => {
+      const next = pool[activityIndexRef.current % pool.length];
+      activityIndexRef.current += 1;
+      setLifeMessage(next);
+      setActivityFeed((current) => [next.toUpperCase(), ...current].slice(0, 6));
+    }, proactive ? 5200 : 12000);
+    return () => window.clearInterval(timer);
+  }, [mode, proactive]);
+
+  useEffect(() => {
+    if (!proactive || idleSeconds < 15 || status !== "ready") return;
+    const prompts = [
+      "I am still here. Need a hand with something?",
+      "You have been idle for a moment. Want me to prepare something?",
+      "Standing by. Try a mission, a search, or a voice session."
+    ];
+    setLifeMessage(prompts[Math.floor(idleSeconds / 15) % prompts.length]);
+  }, [idleSeconds, proactive, status]);
   useEffect(() => {
     fetch("/api/auth", { credentials: "same-origin" })
       .then((r) => r.json().catch(() => ({}))).then((d) => setAuthenticated(Boolean(d.authenticated)))
@@ -366,7 +429,7 @@ export default function Home() {
     } catch (err) { setLiveError(err?.message || "Live voice failed."); stopLive(); }
   }
 
-  const stopLiveRef = useRef(() => {});\n\n  function stopLive() {
+  function stopLive() {
     const socket = liveSocketRef.current;
     liveSocketRef.current = null;
     try { socket?.close(); } catch {}
@@ -419,6 +482,10 @@ export default function Home() {
   }
 
   const state = status === "error" ? "ERROR" : status !== "ready" ? "PROCESSING" : liveConnected ? "LIVE" : "ONLINE";
+  const localTime = clock.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const localDate = clock.toLocaleDateString("en-IN", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
+  const sessionClock = String(Math.floor(sessionSeconds / 60)).padStart(2, "0") + ":" + String(sessionSeconds % 60).padStart(2, "0");
+  const phase = clock.getHours() < 6 ? "NIGHT" : clock.getHours() < 12 ? "MORNING" : clock.getHours() < 17 ? "AFTERNOON" : clock.getHours() < 22 ? "EVENING" : "NIGHT";
   const last = [...messages].reverse().find((m) => m.role === "assistant");
   const modeTitle = NAV.find((item) => item[1] === mode)?.[0] || "COMMAND";
 
@@ -426,7 +493,7 @@ export default function Home() {
   if (!authenticated) return <AuthGate onAuthenticated={() => setAuthenticated(true)} />;
 
   return (
-    <main className="jarvis-shell">
+    <main className={"jarvis-shell " + (reactorFocus ? "reactor-focused" : "")}>
       <div className="noise" />
       <header className="hud-top">
         <div className="brand-lockup"><div className="brand-mark">J</div><div><span className="micro-label">STARK / AI OPERATIONS</span><strong>JARVIS</strong></div></div>
