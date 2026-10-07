@@ -239,7 +239,11 @@ export default function Home() {
     const clean = value.trim();
     if (!clean || !["ready", "error"].includes(statusRef.current)) return;
     if (statusRef.current === "error") clearError();
-    sendMessage({ text: clean }); setInput(""); setMode("command");
+    sendMessage({ text: clean });
+    setInput("");
+    setMode("command");
+    setLifeMessage("Mission received. Assessing your request…");
+    setActivityFeed((current) => ["MISSION RECEIVED", ...current].slice(0, 6));
   }, [clearError, input, sendMessage]);
 
   async function callGemini(payload) {
@@ -447,6 +451,21 @@ export default function Home() {
 
   useEffect(() => () => stopLive(), []);
 
+  useEffect(() => {
+    const handler = (event) => {
+      if (event.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        event.preventDefault();
+        document.querySelector(".command-input input")?.focus();
+      }
+      if (/^[1-7]$/.test(event.key) && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        const target = NAV[Number(event.key) - 1];
+        if (target) setMode(target[1]);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   async function startResearch() {
     if (!researchPrompt.trim()) return;
     setResearch({ status: "queued", text: "", id: null }); setWorking(true);
@@ -503,7 +522,7 @@ export default function Home() {
 
       <div className="hud-body">
         <aside className="left-hud">
-          <nav>{NAV.map(([label, value]) => <button key={value} className={mode === value ? "selected" : ""} onClick={() => setMode(value)}><span className="nav-glyph">{label.slice(0,2)}</span><span>{label}</span></button>)}</nav>
+          <nav>{NAV.map(([label, value], index) => <button key={value} className={mode === value ? "selected" : ""} onClick={() => { setMode(value); setLifeMessage(label + " deck selected."); }}><span className="nav-glyph">{String(index + 1).padStart(2,"0")}</span><span>{label}</span><kbd>{index + 1}</kbd></button>)}</nav>
           <div className="left-footer"><button onClick={() => setMode("live")} className={liveConnected ? "voice-switch on" : "voice-switch"}><span className="equalizer"><i/><i/><i/><i/></span>{liveConnected ? "LIVE ACTIVE" : "LIVE VOICE"}</button><button onClick={clearMemory}>PURGE MEMORY</button></div>
         </aside>
 
@@ -517,8 +536,25 @@ export default function Home() {
               <h1>{mode === "command" ? "At your service." : modeTitle === "FLASH" ? "Think at speed." : modeTitle === "LIVE" ? "Talk naturally." : modeTitle === "CREATE" ? "Make something." : modeTitle === "RESEARCH" ? "Go deeper." : "Bring context."}</h1>
               <p>{mode === "command" ? "JARVIS orchestration plus Gemini's multimodal intelligence, grounded search, files, code, maps, live voice, research, and creative generation." : "One core, multiple experiences — switch modes without leaving mission control."}</p>
               <div className="mission-line"><span /> CURRENT DECK: <b>{modeTitle}</b></div>
+              <div className="life-status">
+                <span className="life-orb" />
+                <span className="life-message">{lifeMessage}</span>
+                <b>{idleSeconds < 6 ? "ENGAGED" : idleSeconds < 15 ? "READY" : "AWAITING INPUT"}</b>
+              </div>
             </div>
-            <div className="hero-reactor"><Reactor active={working || status !== "ready" || liveConnected} speaking={liveConnected} /></div>
+            <button className={"hero-reactor reactor-button " + (reactorFocus ? "focused" : "")} onClick={() => { setReactorFocus((value) => !value); setLifeMessage(reactorFocus ? "Focus layer closed." : "Focus layer engaged. Visual systems heightened."); }} aria-label="Toggle JARVIS focus mode">
+              <Reactor active={working || status !== "ready" || liveConnected || reactorFocus} speaking={liveConnected} />
+            </button>
+          </section>
+
+          <section className="life-strip">
+            <div><span className="micro-label">LOCAL TIME</span><strong>{localTime}</strong><small>{localDate}</small></div>
+            <div><span className="micro-label">DAY PHASE</span><strong>{phase}</strong><small>{lifeMessage}</small></div>
+            <div><span className="micro-label">SESSION</span><strong>{sessionClock}</strong><small>{messages.length} transmissions</small></div>
+            <div><span className="micro-label">POSTURE</span><strong>{state}</strong><small>{proactive ? "PROACTIVE UI" : "QUIET UI"}</small></div>
+            <button className={"proactive-toggle " + (proactive ? "on" : "")} onClick={() => { setProactive((value) => !value); setLifeMessage(proactive ? "Ambient prompts muted." : "Ambient prompts enabled."); }}>
+              <span /> {proactive ? "LIFE ON" : "QUIET"}
+            </button>
           </section>
 
           {mode === "command" ? (
@@ -530,7 +566,7 @@ export default function Home() {
                 {error ? <div className="error-bar"><span>MISSION ERROR</span><button onClick={() => sendCommand(input)}>RETRY ↗</button></div> : null}
               </div>
               <form className="command-input" onSubmit={(e) => { e.preventDefault(); sendCommand(); }}>
-                <div className="prompt-mark">›</div><input value={input} maxLength={12000} onChange={(e) => setInput(e.target.value)} placeholder="Enter mission or ask JARVIS…" />
+                <div className="prompt-mark">›</div><input className="command-field" value={input} maxLength={12000} onChange={(e) => setInput(e.target.value)} placeholder={proactive ? "Enter mission… or press / to focus" : "Enter mission…"} />
                 {status !== "ready" && status !== "error" ? <button type="button" onClick={stop}>STOP</button> : null}
                 <button type="submit" className="send-button" disabled={!["ready","error"].includes(status) || !input.trim()}>TRANSMIT ↗</button>
               </form>
@@ -598,6 +634,13 @@ export default function Home() {
         </section>
 
         <aside className="right-hud">
+          <section className="data-card life-card">
+            <div className="card-title"><span className="micro-label">PRESENCE</span><b>{proactive ? "ACTIVE" : "QUIET"}</b></div>
+            <div className="presence-pulse"><span /><i /><b /></div>
+            <strong>{lifeMessage}</strong>
+            <div className="presence-meta"><span>{phase}</span><span>{localTime}</span></div>
+            <div className="activity-feed">{activityFeed.map((item, index) => <div key={index}><i />{item}</div>)}</div>
+          </section>
           <section className="data-card telemetry"><div className="card-title"><span className="micro-label">TELEMETRY</span><b>LIVE</b></div><div className="telemetry-big">J-04</div><div className="meter-row"><span>CORE</span><i><b style={{width:"92%"}}/></i><em>FLASH</em></div><div className="meter-row"><span>FILES</span><i><b style={{width:Math.min(100,files.length*10)+"%"}}/></i><em>{files.length}</em></div><div className="meter-row"><span>VOICE</span><i><b style={{width:liveConnected?"100%":"12%"}}/></i><em>{liveConnected?"LIVE":"READY"}</em></div></section>
           <section className="data-card focus-card"><div className="card-title"><span className="micro-label">CAPABILITY STACK</span></div>{["Google Search","URL Context","Code Execution","Maps Grounding","Multimodal Files","Live Voice","Image / Video","Deep Research"].map((x) => <div className="cap-line" key={x}><span className="focus-dot" /><b>{x}</b><em>READY</em></div>)}</section>
           <section className="data-card voice-card"><div className="card-title"><span className="micro-label">VOICE ENGINE</span></div><div className="voice-wave">{Array.from({length:18},(_,i)=><i key={i} style={{"--delay":i*40+"ms","--height":(18+(i*13)%52)+"%"}}/>)}</div><strong>{voiceStatus}</strong><p>Gemini 3.8 Flash TTS for high-fidelity speech. Gemini Live for natural two-way conversation.</p>{voiceAudio ? <AudioPlayer dataUrl={voiceAudio} label="Gemini voice output" /> : null}</section>
