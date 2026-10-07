@@ -230,7 +230,7 @@ export default function Home() {
 
   async function runAction(type) {
     if (type === "web") { setMode("flash"); setFlashPrompt(""); return; }
-    if (type === "url") { setMode("workspace"); return; }
+    if (type === "url") { setMode("workspace"); await handleUrl(); return; }
     if (type === "code") {
       setMode("workspace");
       setFlashPrompt(codePrompt);
@@ -366,9 +366,10 @@ export default function Home() {
     } catch (err) { setLiveError(err?.message || "Live voice failed."); stopLive(); }
   }
 
-  function stopLive() {
-    try { liveSocketRef.current?.close(); } catch {}
+  const stopLiveRef = useRef(() => {});\n\n  function stopLive() {
+    const socket = liveSocketRef.current;
     liveSocketRef.current = null;
+    try { socket?.close(); } catch {}
     try { liveStreamRef.current?.getTracks().forEach((track) => track.stop()); } catch {}
     liveStreamRef.current = null;
     try {
@@ -409,7 +410,7 @@ export default function Home() {
   async function handleUrl() {
     if (!url.trim()) return;
     setMode("workspace");
-    await callGemini({ mode: "url", prompt: flashPrompt || "Summarize the URL and extract the important information.", search: true, urlContext: true, files: [] });
+    await callGemini({ mode: "url", prompt: (flashPrompt || "Summarize the URL and extract the important information.") + "\\n\\nURL: " + url.trim(), search: true, urlContext: true, files: [] });
   }
 
   function clearMemory() {
