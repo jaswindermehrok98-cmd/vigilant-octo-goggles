@@ -114,10 +114,10 @@ const browserOpen = tool({
       });
       if (!response.ok) return { ok: false, error: "Browserless request failed (" + response.status + ")." };
       const html = await readLimitedText(response, 250000, abortSignal);
-      const text = html.replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
-        .replace(/<style[\\s\\S]*?<\\/style>/gi, " ")
-        .replace(/<noscript[\\s\\S]*?<\\/noscript>/gi, " ")
-        .replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 15000);
+      const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+        .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 15000);
       return { ok: true, url: safeUrl, text, untrustedContent: true };
     } catch (error) {
       if (error?.name === "AbortError" || error?.name === "TimeoutError") return { ok: false, error: "Browserless timed out or was cancelled." };
