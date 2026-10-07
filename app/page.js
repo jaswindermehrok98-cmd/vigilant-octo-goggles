@@ -269,7 +269,9 @@ export default function Home() {
       };
       audio.onerror = () => {
         cleanupAudio();
-        throw new Error("Audio playback failed.");
+        const fallbackWorked = browserSpeak(speech);
+        setVoiceState(fallbackWorked ? "FALLBACK" : "ERROR");
+        setVoiceError(fallbackWorked ? "Audio playback failed — browser voice fallback active." : "Audio playback failed.");
       };
       await audio.play();
     } catch (err) {
