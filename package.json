@@ -1,0 +1,17 @@
+{
+  "name": "jarvis-assistant",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": { "dev": "next dev", "build": "next build", "start": "next start", "test": "node --test" },
+  "dependencies": {
+    "@ai-sdk/google": "4.0.88",
+    "@ai-sdk/react": "4.0.131",
+    "ai": "7.0.123",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
+  }
+}
