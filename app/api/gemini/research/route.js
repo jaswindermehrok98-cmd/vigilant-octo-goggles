@@ -11,6 +11,7 @@ export async function POST(request){
 export async function GET(request){
  const originError=enforceSameOrigin(request); if(originError)return originError;
  const authError=requireSession(request); if(authError)return authError;
+ const limit=rateLimit(request,"research-read",30,60*1000); if(!limit.allowed)return rateLimitResponse(limit.retryAfter);
  const id=new URL(request.url).searchParams.get("id"); if(!id)return Response.json({error:"Research id is required."},{status:400});
  try{return Response.json(await getInteraction(id),{headers:{"cache-control":"no-store"}});}catch(error){return Response.json({error:error instanceof Error?error.message:"Research lookup failed."},{status:500});}
 }
