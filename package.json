@@ -20,6 +20,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "4.6.5",
-    "@google/genai": "2.27.0"
+    "@google/genai": "2.27.0",
+    "@browserbasehq/stagehand": "4.1.0"
   }
 }
