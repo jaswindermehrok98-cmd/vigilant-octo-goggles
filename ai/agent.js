@@ -7,6 +7,7 @@ import { evaluateArithmetic } from "../lib/calculator.js";
 import { validateBrowserUrl } from "../lib/browser-security.js";
 import { lookupEnvironment } from "../lib/environment.js";
 import { describeProtocol, listProtocols } from "../lib/protocols.js";
+import { browserAgentInput, runBrowserAgent } from "../lib/browser-agent.js";
 
 const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
 const memorySchema = z.object({
@@ -94,6 +95,12 @@ const codeSearch = tool({
   description: "Search programming documentation and public code sources.",
   inputSchema: z.object({ query: z.string().min(2).max(400) }),
   execute: async ({ query }, { abortSignal }) => tavily(query, { include_domains: ["github.com", "stackoverflow.com", "npmjs.com", "developer.mozilla.org", "ai-sdk.dev", "vercel.com", "ai.google.dev"] }, abortSignal)
+});
+
+const realBrowserAgent = tool({
+  description: "Control a real Browserbase Chromium session. Observe the current page, perform a safe browser action, verify the result, and retry within the same objective. Use this for clicking, typing, scrolling, navigating, forms, dashboards, and multi-step browser workflows.",
+  inputSchema: browserAgentInput,
+  execute: async (input) => runBrowserAgent(input)
 });
 
 const browserOpen = tool({
@@ -240,7 +247,7 @@ export const jarvis = new ToolLoopAgent({
   callOptionsSchema,
   instructions,
   tools: {
-    calculator, currentTime, webSearch, codeSearch, browserOpen,
+    calculator, currentTime, webSearch, codeSearch, browserOpen, realBrowserAgent,
     systemDiagnostics, localSystemBridge, environmentLookup, protocol,
     draftMeetingBrief, draftDocument, emailDraft, calendarDraft,
     visionModule, identityModule, rememberLocally
