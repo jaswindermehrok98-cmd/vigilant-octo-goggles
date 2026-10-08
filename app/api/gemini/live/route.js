@@ -10,6 +10,6 @@ export async function POST(request){
   const token=await ai.authTokens.create({
    config:{uses:1,expireTime:new Date(Date.now()+30*60*1000).toISOString(),newSessionExpireTime:new Date(Date.now()+60*1000).toISOString(),liveConnectConstraints:{model:"gemini-3.8-live",config:{sessionResumption:{},responseModalities:["AUDIO"]}}}
   });
-  return Response.json({token:token.name,model:"gemini-3.8-live"},{headers:{"cache-control":"no-store"}});
+  return Response.json({token:token.name,model:"gemini-3.8-live",wsPath:"/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"},{headers:{"cache-control":"no-store"}});
  }catch(error){return Response.json({error:error instanceof Error?error.message:"Live token creation failed."},{status:500});}
 }
