@@ -103,6 +103,7 @@ function AudioPlayer({ dataUrl, label = "PLAY AUDIO" }) {
 export default function Home() {
   const [authenticated, setAuthenticated] = useState(false);
   const [checked, setChecked] = useState(false);
+  const [health, setHealth] = useState(null);
   const [input, setInput] = useState("");
   const [memory, setMemory] = useState([]);
   const [mode, setMode] = useState("command");
@@ -158,7 +159,6 @@ export default function Home() {
   }), []);
   const { messages, sendMessage, status, stop, error, clearError } = useChat({
     transport,
-    maxSteps: 8,
     onError: (err) => {
       setActivityFeed((current) => [("TOOL ERROR: " + (err?.message || "Agent request failed")).slice(0, 120), ...current].slice(0, 6));
       setLifeMessage("A tool reported an error. Check the command trace.");
@@ -225,6 +225,19 @@ export default function Home() {
       .then((r) => r.json().catch(() => ({}))).then((d) => setAuthenticated(Boolean(d.authenticated)))
       .catch(() => setAuthenticated(false)).finally(() => setChecked(true));
   }, []);
+  useEffect(() => {
+    if (!authenticated) {
+      setHealth(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/health", { credentials: "same-origin", cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setHealth(data); })
+      .catch(() => { if (!cancelled) setHealth(null); });
+    return () => { cancelled = true; };
+  }, [authenticated]);
+
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem("jarvis-memory") || "[]");
@@ -591,6 +604,8 @@ export default function Home() {
   const phase = clock.getHours() < 6 ? "NIGHT" : clock.getHours() < 12 ? "MORNING" : clock.getHours() < 17 ? "AFTERNOON" : clock.getHours() < 22 ? "EVENING" : "NIGHT";
   const last = [...messages].reverse().find((m) => m.role === "assistant");
   const modeTitle = NAV.find((item) => item[1] === mode)?.[0] || "COMMAND";
+  const configured = health?.configured || {};
+  const modelLabel = health?.models?.agent || "gemini-3.8-flash";
 
   if (!checked) return <main className="boot-screen"><Reactor active /><span>BOOTING JARVIS / GEMINI CORE…</span></main>;
   if (!authenticated) return <AuthGate onAuthenticated={() => setAuthenticated(true)} />;
@@ -600,7 +615,7 @@ export default function Home() {
       <div className="noise" />
       <header className="hud-top">
         <div className="brand-lockup"><div className="brand-mark">J</div><div><span className="micro-label">STARK / AI OPERATIONS</span><strong>JARVIS</strong></div></div>
-        <div className="top-readouts"><span>CORE <b>GEMINI 3.8 FLASH</b></span><span>UPLINK <b className="live-dot">● LIVE</b></span><span>MEM <b>{memory.length}</b></span></div>
+        <div className="top-readouts"><span>CORE <b>{modelLabel}</b></span><span>UPLINK <b className="live-dot">● LIVE</b></span><span>MEM <b>{memory.length}</b></span></div>
         <div className={"global-status " + state.toLowerCase()}><i /> {state}</div>
       </header>
 
@@ -663,7 +678,7 @@ export default function Home() {
     {!textOf(m) && !(m.parts || []).some((part) => typeof part.type === "string" && part.type.startsWith("tool-")) ? <div className="message-text">Running tools…</div> : null}
   </div>
 </article>)}
-                {error ? <div className="error-bar"><span>MISSION ERROR</span><button onClick={() => sendCommand(lastCommandRef.current)}>RETRY ↗</button></div> : null}
+                {error ? <div className="error-bar"><span>MISSION ERROR · {String(error.message || "Agent request failed").slice(0, 260)}</span><button onClick={() => sendCommand(lastCommandRef.current)}>RETRY ↗</button></div> : null}
               </div>
               <form className="command-input" onSubmit={(e) => { e.preventDefault(); sendCommand(); }}>
                 <div className="prompt-mark">›</div><input className="command-field" value={input} maxLength={12000} onChange={(e) => setInput(e.target.value)} placeholder={proactive ? "Enter mission… or press / to focus" : "Enter mission…"} />
@@ -742,7 +757,16 @@ export default function Home() {
             <div className="activity-feed">{activityFeed.map((item, index) => <div key={index}><i />{item}</div>)}</div>
           </section>
           <section className="data-card telemetry"><div className="card-title"><span className="micro-label">TELEMETRY</span><b>LIVE</b></div><div className="telemetry-big">J-04</div><div className="meter-row"><span>CORE</span><i><b style={{width:"92%"}}/></i><em>FLASH</em></div><div className="meter-row"><span>FILES</span><i><b style={{width:Math.min(100,files.length*10)+"%"}}/></i><em>{files.length}</em></div><div className="meter-row"><span>VOICE</span><i><b style={{width:liveConnected?"100%":"12%"}}/></i><em>{liveConnected?"LIVE":"READY"}</em></div></section>
-          <section className="data-card focus-card"><div className="card-title"><span className="micro-label">CAPABILITY STACK</span></div>{["Google Search","URL Context","Code Execution","Maps Grounding","Multimodal Files","Live Voice","Image / Video","Deep Research"].map((x) => <div className="cap-line" key={x}><span className="focus-dot" /><b>{x}</b><em>READY</em></div>)}</section>
+          <section className="data-card focus-card"><div className="card-title"><span className="micro-label">CAPABILITY STACK</span></div>{[
+  ["Google Search", Boolean(configured.tavily || configured.gemini)],
+  ["URL Context", Boolean(configured.gemini)],
+  ["Code Execution", Boolean(configured.gemini)],
+  ["Maps Grounding", Boolean(configured.gemini)],
+  ["Multimodal Files", Boolean(configured.gemini)],
+  ["Live Voice", Boolean(configured.gemini)],
+  ["Image / Video", Boolean(configured.gemini)],
+  ["Deep Research", Boolean(configured.gemini)]
+].map(([x, ready]) => <div className="cap-line" key={x}><span className={"focus-dot " + (ready ? "" : "offline-dot")} /><b>{x}</b><em>{ready ? "READY" : "OFFLINE"}</em></div>)}</section>
           <section className="data-card voice-card"><div className="card-title"><span className="micro-label">VOICE ENGINE</span></div><div className="voice-wave">{Array.from({length:18},(_,i)=><i key={i} style={{"--delay":i*40+"ms","--height":(18+(i*13)%52)+"%"}}/>)}</div><strong>{voiceStatus}</strong><p>Gemini 3.8 Flash TTS for high-fidelity speech. Gemini Live for natural two-way conversation.</p>{voiceAudio ? <AudioPlayer dataUrl={voiceAudio} label="Gemini voice output" /> : null}</section>
         </aside>
       </div>
