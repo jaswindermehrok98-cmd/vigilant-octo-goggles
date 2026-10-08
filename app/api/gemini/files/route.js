@@ -1,5 +1,5 @@
-import { enforceSameOrigin, requireSession } from "../../../lib/security.js";
-import { uploadGeminiFile } from "../../../lib/google-gemini.js";
+import { enforceSameOrigin, requireSession } from "../../../../lib/security.js";
+import { uploadGeminiFile } from "../../../../lib/google-gemini.js";
 export const runtime="nodejs";
 export const maxDuration=120;
 export async function POST(request){
