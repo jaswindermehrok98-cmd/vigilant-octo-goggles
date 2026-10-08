@@ -1,5 +1,5 @@
-import { enforceSameOrigin, rateLimit, rateLimitResponse, readJsonBody, requireSession } from "../../../lib/security.js";
-import { getInteraction, startResearch } from "../../../lib/google-gemini.js";
+import { enforceSameOrigin, rateLimit, rateLimitResponse, readJsonBody, requireSession } from "../../../../lib/security.js";
+import { getInteraction, startResearch } from "../../../../lib/google-gemini.js";
 export const runtime="nodejs"; export const maxDuration=120;
 export async function POST(request){
  const originError=enforceSameOrigin(request); if(originError)return originError;
