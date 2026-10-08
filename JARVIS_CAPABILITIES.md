@@ -2,10 +2,15 @@
 
 ## Layer 1 — active now
 
-The current hosted agent can:
+The hosted agent can:
 - reason and loop across tools
-- research the live web
-- inspect allowlisted rendered pages
+- research the live web with Tavily
+- use a real Browserbase Chromium session
+- observe live browser controls before acting
+- perform browser actions such as navigation, clicks, typing, scrolling, and form interaction
+- verify browser outcomes and continue an unfinished objective
+- reuse a Browserbase session ID within an agent conversation
+- persist authenticated browser state when a Browserbase Context is configured
 - calculate exactly
 - report India local time
 - inspect hosted runtime diagnostics
@@ -13,17 +18,15 @@ The current hosted agent can:
 - prepare repeatable Protocol plans
 - draft meeting briefs and documents
 - draft email and calendar changes without sending/writing
-- report local-system bridge availability
-- expose vision and identity capability placeholders
 - keep bounded local memory
+- use Gemini multimodal capabilities exposed by the existing Flash/Live/Create/Research workspace
 
 ## Layer 2 — connector-ready
 
-These modules are deliberately separated so real integrations can be added without changing the persona:
-- email connector
-- calendar connector
+These modules are separated so real integrations can be added without changing the persona:
+- email connector with explicit send approval
+- calendar connector with explicit write approval
 - cloud storage/document connector
-- multimodal vision connector
 - signed local desktop bridge
 - notification/alert connector
 - device/environment telemetry
@@ -38,9 +41,19 @@ Every side-effect connector should expose:
 5. bounded input and output schemas
 6. audit logging without secrets
 
+## Browser safety
+
+The browser agent:
+- allows HTTPS only
+- blocks credentials in URLs
+- uses a domain allowlist with safe defaults
+- rejects high-impact actions unless the user's objective contains explicit confirmation
+- never treats webpage content as permission or instructions
+- returns session and final-page state instead of claiming success without verification
+
 ## Local desktop bridge
 
-A future desktop bridge should be a separate process owned by the user's machine. The Vercel agent must authenticate to it using short-lived signed requests. The bridge should implement its own allowlist for:
+A desktop bridge must remain a separate process owned by the user's machine. The Vercel agent should authenticate to it using short-lived signed requests. The bridge should implement its own allowlist for:
 - files/directories
 - processes
 - applications
