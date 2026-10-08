@@ -155,7 +155,14 @@ export default function Home() {
     credentials: "same-origin",
     prepareSendMessagesRequest: ({ messages }) => ({ body: { messages: messages.slice(-40), memory: memoryRef.current } })
   }), []);
-  const { messages, sendMessage, status, stop, error, clearError } = useChat({ transport });
+  const { messages, sendMessage, status, stop, error, clearError } = useChat({
+    transport,
+    maxSteps: 8,
+    onError: (err) => {
+      setActivityFeed((current) => [("TOOL ERROR: " + (err?.message || "Agent request failed")).slice(0, 120), ...current].slice(0, 6));
+      setLifeMessage("A tool reported an error. Check the command trace.");
+    }
+  });
 
   useEffect(() => { statusRef.current = status; }, [status]);
 
@@ -562,7 +569,23 @@ export default function Home() {
               <div className="panel-head"><div><span className="micro-label">JARVIS AGENT</span><h2>Command channel</h2></div><div className="tool-trace"><span>SEARCH</span><span>TOOLS</span><span>MEMORY</span></div></div>
               <div className="messages">
                 {!messages.length ? <div className="empty-state"><div className="target-reticle"><span/><i/><b/></div><div><span className="micro-label">READY FOR INPUT</span><h3>Give JARVIS a mission.</h3><p>Or jump to FLASH, LIVE, CREATE, RESEARCH, WORKSPACE, or MEMORY.</p></div></div> : null}
-                {messages.map((m) => <article key={m.id} className={"message-row " + m.role}><div className="message-avatar">{m.role === "user" ? "U" : "J"}</div><div className="message-body"><div className="message-meta"><span>{m.role === "user" ? "OPERATOR" : "JARVIS"}</span></div><div className="message-text">{textOf(m) || "Running tools…"}</div></div></article>)}
+                {messages.map((m) => <article key={m.id} className={"message-row " + m.role}>
+  <div className="message-avatar">{m.role === "user" ? "U" : "J"}</div>
+  <div className="message-body">
+    <div className="message-meta"><span>{m.role === "user" ? "OPERATOR" : "JARVIS"}</span></div>
+    {textOf(m) ? <div className="message-text">{textOf(m)}</div> : null}
+    {(m.parts || []).filter((part) => typeof part.type === "string" && part.type.startsWith("tool-")).map((part, index) => {
+      const state = part.state || (part.output ? "output-available" : "input-available");
+      const name = String(part.type).replace(/^tool-/, "");
+      const payload = part.output ?? part.input ?? null;
+      return <div className="tool-event" key={name + "-" + index}>
+        <div><span>TOOL</span><b>{name}</b><em>{state}</em></div>
+        {payload ? <pre>{JSON.stringify(payload, null, 2).slice(0, 1800)}</pre> : null}
+      </div>;
+    })}
+    {!textOf(m) && !(m.parts || []).some((part) => typeof part.type === "string" && part.type.startsWith("tool-")) ? <div className="message-text">Running tools…</div> : null}
+  </div>
+</article>)}
                 {error ? <div className="error-bar"><span>MISSION ERROR</span><button onClick={() => sendCommand(input)}>RETRY ↗</button></div> : null}
               </div>
               <form className="command-input" onSubmit={(e) => { e.preventDefault(); sendCommand(); }}>
