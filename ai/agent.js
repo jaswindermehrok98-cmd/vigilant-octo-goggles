@@ -4,6 +4,7 @@ import { z } from "zod";
 import os from "node:os";
 import process from "node:process";
 import { evaluateArithmetic } from "../lib/calculator.js";
+import { extractArithmeticExpression } from "../lib/jarvis-router.js";
 import { lookupEnvironment } from "../lib/environment.js";
 import { describeProtocol, listProtocols } from "../lib/protocols.js";
 import { firstStepToolChoice, latestUserText } from "../lib/jarvis-router.js";
@@ -54,8 +55,13 @@ const calculator = tool({
   description: "Evaluate exact basic arithmetic.",
   inputSchema: z.object({ expression: z.string().min(1).max(500) }),
   execute: async ({ expression }) => {
-    try { return { ok: true, value: evaluateArithmetic(expression), expression }; }
-    catch (error) { return { ok: false, error: error instanceof Error ? error.message : "Calculation failed." }; }
+    try {
+      const parsed = extractArithmeticExpression(expression);
+      if (!parsed) return { ok: false, error: "I could not extract a valid arithmetic expression." };
+      return { ok: true, value: evaluateArithmetic(parsed), expression: parsed };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Calculation failed." };
+    }
   }
 });
 
@@ -191,8 +197,7 @@ const instructions = [
   "For arithmetic or exact calculations, ALWAYS call calculator.",
   "For current India time, ALWAYS call currentTime.",
   "For weather/environment conditions, ALWAYS call environmentLookup.",
-  "For browser tasks involving opening, navigating, clicking, typing, scrolling, selecting, uploading, dashboards, forms, or multi-step web interaction, ALWAYS call realBrowserAgent. Do not substitute browserOpen.",
-  "Use browserOpen only for read-only public page retrieval when no interaction is requested.",
+  "For browser tasks involving opening, navigating, clicking, typing, scrolling, selecting, uploading, dashboards, forms, or multi-step web interaction, ALWAYS call realBrowserAgent.",
   "After a tool returns, use its evidence; never claim a tool action succeeded unless the tool reports verified success.",
   "Stop once enough evidence is gathered rather than fabricating missing results.",
   "Use protocols as repeatable playbooks. A prepared protocol is not permission to cause external side effects.",
@@ -229,7 +234,7 @@ export const jarvis = new ToolLoopAgent({
   },
   prepareStep: async ({ stepNumber, messages }) => {
     if (stepNumber === 0) {
-      const toolChoice = firstStepToolChoice(messages);
+      const toolChoice = firstStepToolChoice(latestUserText(messages));
       if (toolChoice) return { toolChoice };
     }
     return {};
