@@ -434,6 +434,7 @@ export default function Home() {
       liveSocketRef.current = socket;
       outputTimeRef.current = 0;
       if (!outputContextRef.current) outputContextRef.current = new AudioContext();
+      await outputContextRef.current.resume().catch(() => undefined);
 
       let setupComplete = false;
       let micStarted = false;
@@ -519,14 +520,24 @@ export default function Home() {
 
       socket.onerror = () => {
         setLiveError("Gemini Live connection error.");
+        try { socket.close(); } catch {}
       };
 
       socket.onclose = () => {
-        setLiveConnected(false);
-        liveSocketRef.current = null;
         try { liveStreamRef.current?.getTracks().forEach((track) => track.stop()); } catch {}
         liveStreamRef.current = null;
+        try {
+          const item = liveProcessorRef.current;
+          item?.source?.disconnect();
+          item?.processor?.disconnect();
+          item?.context?.close();
+        } catch {}
         liveProcessorRef.current = null;
+        try { outputContextRef.current?.close(); } catch {}
+        outputContextRef.current = null;
+        outputTimeRef.current = 0;
+        liveSocketRef.current = null;
+        setLiveConnected(false);
       };
     } catch (err) {
       setLiveError(err?.message || "Live voice failed.");
