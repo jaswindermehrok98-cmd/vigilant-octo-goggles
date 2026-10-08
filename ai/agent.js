@@ -269,19 +269,19 @@ function latestUserText(messages) {
 function firstStepToolChoice(messages) {
   const text = latestUserText(messages).trim();
   const lower = text.toLowerCase();
-  if (/^(what is|calculate|compute|solve|evaluate)\\b.*[0-9]/i.test(text) || /^\\s*[0-9().%+\\-*/\\s]{3,}\\s*$/.test(text)) {
+  if (/^(what is|calculate|compute|solve|evaluate)\b.*[0-9]/i.test(text) || /^\s*[0-9().%+\\-*/\s]{3,}\s*$/.test(text)) {
     return { type: "tool", toolName: "calculator" };
   }
-  if (/\\b(what time|current time|time is it|date today|today's date)\\b/i.test(lower)) {
+  if (/\b(what time|current time|time is it|date today|today's date)\b/i.test(lower)) {
     return { type: "tool", toolName: "currentTime" };
   }
-  if (/\\b(weather|temperature|forecast|humidity|wind speed)\\b/i.test(lower)) {
+  if (/\b(weather|temperature|forecast|humidity|wind speed)\b/i.test(lower)) {
     return { type: "tool", toolName: "environmentLookup" };
   }
-  if (/\\b(open|go to|visit|click|tap|type|scroll|fill|select|navigate|log in|login|dashboard|website|browser)\\b/i.test(lower)) {
+  if (/\b(open|go to|visit|click|tap|type|scroll|fill|select|navigate|log in|login|dashboard|website|browser)\b/i.test(lower)) {
     return { type: "tool", toolName: "realBrowserAgent" };
   }
-  if (/\\b(latest|today|current|news|search|research|look up|find out)\\b/i.test(lower)) {
+  if (/\b(latest|today|current|news|search|research|look up|find out)\b/i.test(lower)) {
     return { type: "tool", toolName: "webSearch" };
   }
   return null;
