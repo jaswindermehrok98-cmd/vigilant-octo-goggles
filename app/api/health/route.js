@@ -18,7 +18,7 @@ export async function GET() {
         auth: Boolean(process.env.JARVIS_ACCESS_TOKEN)
       },
       models: {
-        agent: process.env.JARVIS_MODEL || "gemini-3.8-flash",
+        agent: (process.env.JARVIS_MODEL || process.env.GEMINI_CHAT_MODEL || process.env.JARVIS_AGENT_MODEL || "gemini-3.8-flash").replace(/^google\//, ""),
         image: process.env.JARVIS_IMAGE_MODEL || "gemini-3.1-flash-image",
         video: process.env.JARVIS_VIDEO_MODEL || "gemini-omni-1.1-flash",
         tts: process.env.JARVIS_TTS_MODEL || "gemini-3.8-flash-tts",
