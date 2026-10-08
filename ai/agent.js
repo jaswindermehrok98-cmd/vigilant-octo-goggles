@@ -7,7 +7,6 @@ import { evaluateArithmetic } from "../lib/calculator.js";
 import { validateBrowserUrl } from "../lib/browser-security.js";
 import { lookupEnvironment } from "../lib/environment.js";
 import { describeProtocol, listProtocols } from "../lib/protocols.js";
-import { browserAgentInput, runBrowserAgent } from "../lib/browser-agent.js";
 
 const google = createGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY });
 const memorySchema = z.object({
@@ -99,8 +98,16 @@ const codeSearch = tool({
 
 const realBrowserAgent = tool({
   description: "Control a real Browserbase Chromium session. Observe the current page, perform a safe browser action, verify the result, and retry within the same objective. Use this for clicking, typing, scrolling, navigating, forms, dashboards, and multi-step browser workflows.",
-  inputSchema: browserAgentInput,
-  execute: async (input) => runBrowserAgent(input)
+  inputSchema: z.object({
+    objective: z.string().min(2).max(2500),
+    startUrl: z.string().url().max(2000).optional(),
+    sessionId: z.string().max(200).optional(),
+    maxSteps: z.number().int().min(1).max(12).default(8)
+  }),
+  execute: async (input) => {
+    const { runBrowserAgent } = await import("../lib/browser-agent.js");
+    return runBrowserAgent(input);
+  }
 });
 
 const browserOpen = tool({
@@ -249,6 +256,37 @@ const instructions = [
   "Be transparent about limitations and failures."
 ].join("\n");
 
+function latestUserText(messages) {
+  for (let i = (messages || []).length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role !== "user") continue;
+    if (typeof message.content === "string") return message.content;
+    if (Array.isArray(message.content)) return message.content.filter((part) => part?.type === "text").map((part) => part.text || "").join(" ");
+  }
+  return "";
+}
+
+function firstStepToolChoice(messages) {
+  const text = latestUserText(messages).trim();
+  const lower = text.toLowerCase();
+  if (/^(what is|calculate|compute|solve|evaluate)\\b.*[0-9]/i.test(text) || /^\\s*[0-9().%+\\-*/\\s]{3,}\\s*$/.test(text)) {
+    return { type: "tool", toolName: "calculator" };
+  }
+  if (/\\b(what time|current time|time is it|date today|today's date)\\b/i.test(lower)) {
+    return { type: "tool", toolName: "currentTime" };
+  }
+  if (/\\b(weather|temperature|forecast|humidity|wind speed)\\b/i.test(lower)) {
+    return { type: "tool", toolName: "environmentLookup" };
+  }
+  if (/\\b(open|go to|visit|click|tap|type|scroll|fill|select|navigate|log in|login|dashboard|website|browser)\\b/i.test(lower)) {
+    return { type: "tool", toolName: "realBrowserAgent" };
+  }
+  if (/\\b(latest|today|current|news|search|research|look up|find out)\\b/i.test(lower)) {
+    return { type: "tool", toolName: "webSearch" };
+  }
+  return null;
+}
+
 export const jarvis = new ToolLoopAgent({
   model: google(process.env.JARVIS_MODEL || "gemini-3.8-flash"),
   callOptionsSchema,
@@ -270,7 +308,14 @@ export const jarvis = new ToolLoopAgent({
       thinkingConfig: { thinkingLevel: process.env.JARVIS_THINKING_LEVEL || "low" }
     }
   },
-  stopWhen: stepCountIs(6),
+  prepareStep: async ({ stepNumber, messages }) => {
+    if (stepNumber === 0) {
+      const toolChoice = firstStepToolChoice(messages);
+      if (toolChoice) return { toolChoice };
+    }
+    return {};
+  },
+  stopWhen: stepCountIs(12),
   maxOutputTokens: 1536,
-  maxRetries: 0
+  maxRetries: 2
 });
