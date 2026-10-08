@@ -136,6 +136,7 @@ export default function Home() {
   const [idleSeconds, setIdleSeconds] = useState(0);
   const [lifeMessage, setLifeMessage] = useState("All systems nominal. Awaiting your next instruction.");
   const [activityFeed, setActivityFeed] = useState(["CORE ONLINE", "MEMORY READY", "GEMINI LINK ESTABLISHED"]);
+  const lastCommandRef = useRef("");
   const [proactive, setProactive] = useState(true);
   const [reactorFocus, setReactorFocus] = useState(false);
   const lastActivityRef = useRef(Date.now());
@@ -246,6 +247,7 @@ export default function Home() {
     const clean = value.trim();
     if (!clean || !["ready", "error"].includes(statusRef.current)) return;
     if (statusRef.current === "error") clearError();
+    lastCommandRef.current = clean;
     sendMessage({ text: clean });
     setInput("");
     setMode("command");
@@ -399,45 +401,120 @@ export default function Home() {
   }
 
   async function startLive() {
-    if (liveConnected) return;
+    if (liveConnected || liveSocketRef.current) return;
     setLiveError(""); setLiveTranscript([]); setLiveText("");
     try {
       const tokenResponse = await fetch("/api/gemini/live", { method: "POST", credentials: "same-origin" });
       const tokenData = await tokenResponse.json().catch(() => ({}));
       if (!tokenResponse.ok) throw new Error(tokenData.error || "Could not start Gemini Live.");
-      const socket = new WebSocket("wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?access_token=" + encodeURIComponent(tokenData.token));
+
+      const token = String(tokenData.token || "");
+      const model = String(tokenData.model || "gemini-3.8-live");
+      if (!token) throw new Error("Gemini Live token was not returned.");
+
+      const socket = new WebSocket(
+        "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=" +
+        encodeURIComponent(token)
+      );
       liveSocketRef.current = socket;
-      socket.onopen = async () => {
-        socket.send(JSON.stringify({ setup: { model: "models/gemini-3.8-live", responseModalities: ["AUDIO"], inputAudioTranscription: {}, outputAudioTranscription: {}, systemInstruction: { parts: [{ text: "You are JARVIS. Be concise, warm, fast, precise, proactive, and helpful." }] } } }));
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      let setupComplete = false;
+      let micStarted = false;
+
+      const startMicrophone = async () => {
+        if (micStarted || socket.readyState !== WebSocket.OPEN) return;
+        micStarted = true;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         liveStreamRef.current = stream;
         const context = new AudioContext();
         const source = context.createMediaStreamSource(stream);
         const processor = context.createScriptProcessor(4096, 1, 1);
+        const mute = context.createGain();
+        mute.gain.value = 0;
         processor.onaudioprocess = (event) => {
-          if (socket.readyState !== WebSocket.OPEN) return;
+          if (!setupComplete || socket.readyState !== WebSocket.OPEN) return;
           const pcm = floatToPcm16(event.inputBuffer.getChannelData(0), context.sampleRate);
-          socket.send(JSON.stringify({ realtimeInput: { audio: { data: bytesToBase64(pcm), mimeType: "audio/pcm;rate=16000" } } }));
+          socket.send(JSON.stringify({
+            realtimeInput: {
+              audio: {
+                data: bytesToBase64(pcm),
+                mimeType: "audio/pcm;rate=16000"
+              }
+            }
+          }));
         };
-        source.connect(processor); processor.connect(context.destination);
-        liveProcessorRef.current = { processor, source, context };
+        source.connect(processor);
+        processor.connect(mute);
+        mute.connect(context.destination);
+        liveProcessorRef.current = { processor, source, context, mute };
         setLiveConnected(true);
       };
-      socket.onmessage = (event) => {
-        const response = JSON.parse(event.data);
-        const content = response.serverContent;
-        const inputText = content?.inputTranscription?.text;
-        const outputText = content?.outputTranscription?.text;
-        if (inputText) { setLiveText(inputText); setLiveTranscript((current) => [...current.slice(-7), { role: "you", text: inputText }]); }
-        if (outputText) { setLiveText(outputText); setLiveTranscript((current) => [...current.slice(-7), { role: "jarvis", text: outputText }]); }
-        for (const part of content?.modelTurn?.parts || []) {
-          if (part?.inlineData?.data) playLivePcm(part.inlineData.data, 24000);
+
+      socket.onopen = () => {
+        try {
+          socket.send(JSON.stringify({
+            setup: {
+              model: "models/" + model,
+              responseModalities: ["AUDIO"],
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
+              systemInstruction: {
+                parts: [{ text: "You are JARVIS. Be concise, warm, fast, precise, proactive, and helpful. Do not claim actions happened unless verified." }]
+              }
+            }
+          }));
+        } catch (error) {
+          setLiveError(error?.message || "Could not initialize Gemini Live.");
+          stopLive();
         }
-        if (content?.turnComplete) setLiveText("");
       };
-      socket.onerror = () => setLiveError("Gemini Live connection error.");
-      socket.onclose = () => { stopLive(); };
-    } catch (err) { setLiveError(err?.message || "Live voice failed."); stopLive(); }
+
+      socket.onmessage = async (event) => {
+        try {
+          const response = JSON.parse(event.data);
+          if (response.setupComplete) {
+            setupComplete = true;
+            await startMicrophone();
+            return;
+          }
+
+          const content = response.serverContent;
+          const inputText = content?.inputTranscription?.text;
+          const outputText = content?.outputTranscription?.text;
+
+          if (inputText) {
+            setLiveText(inputText);
+            setLiveTranscript((current) => [...current.slice(-7), { role: "you", text: inputText }]);
+          }
+          if (outputText) {
+            setLiveText(outputText);
+            setLiveTranscript((current) => [...current.slice(-7), { role: "jarvis", text: outputText }]);
+          }
+          for (const part of content?.modelTurn?.parts || []) {
+            if (part?.inlineData?.data) playLivePcm(part.inlineData.data, 24000);
+          }
+          if (content?.turnComplete) setLiveText("");
+        } catch (error) {
+          setLiveError(error?.message || "Gemini Live response processing failed.");
+          stopLive();
+        }
+      };
+
+      socket.onerror = () => {
+        setLiveError("Gemini Live connection error.");
+      };
+
+      socket.onclose = () => {
+        setLiveConnected(false);
+        liveSocketRef.current = null;
+        try { liveStreamRef.current?.getTracks().forEach((track) => track.stop()); } catch {}
+        liveStreamRef.current = null;
+        liveProcessorRef.current = null;
+      };
+    } catch (err) {
+      setLiveError(err?.message || "Live voice failed.");
+      stopLive();
+    }
   }
 
   function stopLive() {
@@ -586,7 +663,7 @@ export default function Home() {
     {!textOf(m) && !(m.parts || []).some((part) => typeof part.type === "string" && part.type.startsWith("tool-")) ? <div className="message-text">Running tools…</div> : null}
   </div>
 </article>)}
-                {error ? <div className="error-bar"><span>MISSION ERROR</span><button onClick={() => sendCommand(input)}>RETRY ↗</button></div> : null}
+                {error ? <div className="error-bar"><span>MISSION ERROR</span><button onClick={() => sendCommand(lastCommandRef.current)}>RETRY ↗</button></div> : null}
               </div>
               <form className="command-input" onSubmit={(e) => { e.preventDefault(); sendCommand(); }}>
                 <div className="prompt-mark">›</div><input className="command-field" value={input} maxLength={12000} onChange={(e) => setInput(e.target.value)} placeholder={proactive ? "Enter mission… or press / to focus" : "Enter mission…"} />
