@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { enforceSameOrigin, requireSession } from "../../../lib/security.js";
+import { enforceSameOrigin, requireSession } from "../../../../lib/security.js";
 export const runtime="nodejs"; export const maxDuration=20;
 export async function POST(request){
  const originError=enforceSameOrigin(request); if(originError)return originError;
