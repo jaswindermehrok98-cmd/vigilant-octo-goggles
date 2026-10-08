@@ -1,5 +1,5 @@
-import { enforceSameOrigin, rateLimit, rateLimitResponse, readJsonBody, requireSession } from "../../../lib/security.js";
-import { synthesizeSpeech } from "../../../lib/google-gemini.js";
+import { enforceSameOrigin, rateLimit, rateLimitResponse, readJsonBody, requireSession } from "../../../../lib/security.js";
+import { synthesizeSpeech } from "../../../../lib/google-gemini.js";
 export const runtime="nodejs"; export const maxDuration=45;
 export async function POST(request){
  const originError=enforceSameOrigin(request); if(originError)return originError;
