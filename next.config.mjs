@@ -1,6 +1,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  serverExternalPackages: ["@browserbasehq/stagehand"],
   async headers() {
     return [{
       source: "/(.*)",
